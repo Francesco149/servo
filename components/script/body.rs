@@ -42,6 +42,7 @@ use js::typedarray::{ArrayBuffer, CreateWith};
 use mime::{self, Mime};
 use net_traits::request::{BodyChunkRequest, BodySource as NetBodySource, RequestBody};
 use script_traits::serializable::BlobImpl;
+use std::cell::Cell;
 use std::ptr;
 use std::rc::Rc;
 use std::str;
@@ -72,6 +73,7 @@ struct TransmitBodyConnectHandler {
     bytes_sender: Option<IpcSender<Vec<u8>>>,
     control_sender: IpcSender<BodyChunkRequest>,
     in_memory: Option<Vec<u8>>,
+    in_memory_done: Cell<bool>,
     source: BodySource,
 }
 
@@ -91,6 +93,7 @@ impl TransmitBodyConnectHandler {
             bytes_sender: None,
             control_sender,
             in_memory,
+            in_memory_done: Cell::new(false),
             source,
         }
     }
@@ -155,6 +158,12 @@ impl TransmitBodyConnectHandler {
 
     /// The entry point to <https://fetch.spec.whatwg.org/#concept-request-transmit-body>
     fn transmit_body_chunk(&mut self) {
+        if self.in_memory_done.get() {
+            // Step 5.1.3
+            let _ = self.control_sender.send(BodyChunkRequest::Done);
+            return;
+        }
+
         let stream = self.stream.clone();
         let control_sender = self.control_sender.clone();
         let bytes_sender = self
@@ -165,7 +174,9 @@ impl TransmitBodyConnectHandler {
         // In case of the data being in-memory, send everything in one chunk, by-passing SpiderMonkey.
         if let Some(bytes) = self.in_memory.clone() {
             let _ = bytes_sender.send(bytes);
-            let _ = control_sender.send(BodyChunkRequest::Done);
+            // Mark this body as `done` so that we can correctly make it as Done in next tick
+            // and we won't leave this stream too early
+            self.in_memory_done.set(true);
             return;
         }
 
