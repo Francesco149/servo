@@ -165,6 +165,7 @@ impl TransmitBodyConnectHandler {
         // In case of the data being in-memory, send everything in one chunk, by-passing SpiderMonkey.
         if let Some(bytes) = self.in_memory.clone() {
             let _ = bytes_sender.send(bytes);
+            let _ = control_sender.send(BodyChunkRequest::Done);
             return;
         }
 
