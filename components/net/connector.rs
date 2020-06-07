@@ -16,13 +16,21 @@ pub const BUF_SIZE: usize = 32768;
 pub const ALPN_H2_H1: &'static [u8] = b"\x02h2\x08http/1.1";
 pub const ALPN_H1: &'static [u8] = b"\x08http/1.1";
 
+#[cfg(openssl)]
+macro_rules! SECLEVEL { () => { "@SECLEVEL=2" } }
+
+#[cfg(libressl)]
+macro_rules! SECLEVEL { () => { "" } }
+
 // See https://wiki.mozilla.org/Security/Server_Side_TLS for orientation.
 const TLS1_2_CIPHERSUITES: &'static str = concat!(
     "ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:",
     "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:",
     "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:",
-    "ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA@SECLEVEL=2"
+    "ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA", SECLEVEL!()
 );
+
+#[cfg(openssl)]
 const SIGNATURE_ALGORITHMS: &'static str = concat!(
     "ed448:ed25519:",
     "ECDSA+SHA384:ECDSA+SHA256:",
@@ -94,6 +102,7 @@ pub fn create_tls_config(certs: &str, alpn: &[u8]) -> TlsConfig {
         .expect("could not set alpn protocols");
     cfg.set_cipher_list(TLS1_2_CIPHERSUITES)
         .expect("could not set TLS 1.2 ciphersuites");
+    #[cfg(openssl)]
     cfg.set_sigalgs_list(SIGNATURE_ALGORITHMS)
         .expect("could not set signature algorithms");
     cfg.set_options(
